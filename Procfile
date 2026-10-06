@@ -1,0 +1,1 @@
+worker: python qrcodemaker_bot.py
