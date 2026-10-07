@@ -1,59 +1,109 @@
+import os
 import io
+import asyncio
 import logging
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+import uvicorn
 import qrcode
 
-# បើក Log សម្រាប់មើលព័ត៌មាន ឬ Error
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters,
+)
+
+# 1. កំណត់ Logging
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 
-# មុខងារស្វាគមន៍ពេលអ្នកប្រើចុច /start
+# 2. ទាញយក Bot Token ពី Environment Variables (ឬដាក់ Token ដោយផ្ទាល់សម្រាប់ Testing)
+TOKEN = os.getenv("BOT_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN")
+
+# --- TELEGRAM BOT LOGIC ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [
+            InlineKeyboardButton("✨ Custom Styling", callback_data="btn_style"),
+            InlineKeyboardButton("❓ Help & Usage", callback_data="btn_help"),
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
-        "ជំរាបសួរ! សូមផ្ញើ Link/Hyperlink មកកាន់ខ្ញុំ ខ្ញុំនឹងបង្កើត QR Code ជូនអ្នក។"
+        "👋 **Welcome to QRCode Bot!**\n\nសូមផ្ញើ Link ឬ Hyperlink មកកាន់ខ្ញុំ ខ្ញុំនឹងបង្កើត QR Code ជូនអ្នក។",
+        reply_markup=reply_markup,
+        parse_mode="Markdown",
     )
 
-# មុខងារបង្កើត QR Code ពី Link
+async def button_click_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data == "btn_style":
+        await query.edit_message_text("🎨 ផ្ញើ Link មកដើម្បីទទួលបាន QR Code!")
+    elif query.data == "btn_help":
+        await query.edit_message_text("❓ សូមផ្ញើ Link ដែលចាប់ផ្តើមដោយ http:// ឬ https://")
+
 async def generate_qr(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
-    
-    # ពិនិត្យថាអត្ថបទជា Link ឬអត់ (តាមរយៈ http:// ឬ https://)
     if text.startswith("http://") or text.startswith("https://"):
-        # បង្កើត QR Code
         qr = qrcode.QRCode(
             version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
             box_size=10,
             border=4,
         )
         qr.add_data(text)
         qr.make(fit=True)
-
         img = qr.make_image(fill_color="black", back_color="white")
 
-        # រក្សាទុកក្នុង Memory (In-Memory Bytes)
         bio = io.BytesIO()
         bio.name = 'qrcode.png'
         img.save(bio, 'PNG')
         bio.seek(0)
 
-        # ផ្ញើរូបភាព QR Code ត្រឡប់ទៅ Telegram វិញ
         await update.message.reply_photo(photo=bio, caption=f"នេះជា QR Code សម្រាប់៖\n{text}")
     else:
         await update.message.reply_text("សូមផ្ញើ Link ដែលត្រឹមត្រូវ (ឧទាហរណ៍៖ https://example.com)")
 
-if __name__ == '__main__':
-    # ដាក់ Bot Token របស់អ្នកនៅត្រង់នេះ
-    TOKEN = "8957616954:AAHIMDj92nBIoYyCGrdYprf_swyMXKh023E"
+# បង្កើត Telegram Application Instance
+bot_app = ApplicationBuilder().token(TOKEN).build()
+bot_app.add_handler(CommandHandler("start", start))
+bot_app.add_handler(CallbackQueryHandler(button_click_handler))
+bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, generate_qr))
 
-    app = ApplicationBuilder().token(TOKEN).build()
 
-    # ភ្ជាប់ Command និង Message Handler
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, generate_qr))
+# --- FASTAPI WEB SERVER SETUP ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ចាប់ផ្តើម Telegram Bot Polling ពេល Web Server ដំណើរការ
+    await bot_app.initialize()
+    await bot_app.start()
+    asyncio.create_task(bot_app.updater.start_polling())
+    logging.info("Telegram Bot started successfully.")
+    
+    yield
+    
+    # បិទ Telegram Bot ពេល Web Server បិទ
+    await bot_app.updater.stop()
+    await bot_app.stop()
+    await bot_app.shutdown()
 
-    print("Bot កំពុងដំណើរការ...")
-    app.run_polling()
+# បង្កើត FastAPI Application Instance
+app = FastAPI(title="QRCode Bot Web Service", lifespan=lifespan)
+
+# បន្ថែម alias ឈ្មោះ "application" ដើម្បីកុំឱ្យមាន Error លើ Render ប្រសិនបើ Start Command ប្រើ main:application
+application = app
+
+@app.get("/")
+def health_check():
+    return {"status": "ok", "message": "QRCode Bot is running 24/7!"}
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
