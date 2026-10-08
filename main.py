@@ -118,7 +118,7 @@ async def generate_qr_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await context.bot.send_photo(
             chat_id=update.effective_chat.id,
             photo=photo_bytes,
-            caption=f"✨ **QR Code របស់អ្នកត្រូវបានបង្កើតរួចរាល់!**\n🔗 Link: {text}",
+            #caption=f"✨ **QR Code របស់អ្នកត្រូវបានបង្កើតរួចរាល់!**\n🔗 Link: {text}",
             parse_mode="Markdown"
         )
     else:
