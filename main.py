@@ -98,15 +98,16 @@ async def generate_qr_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     text = update.message.text.strip()
+    text_lower = text.lower()  # បំប្លែងជាអក្សរតូចដើម្បីងាយស្រួលផ្ទៀងផ្ទាត់ (Case-insensitive)
     
-    # ចាប់យក URL រាល់ទម្រង់ទាំងអស់
-    if text.startswith("http://") or text.startswith("https://"):
+    # ចាប់យក URL ទោះជាប្រើ Http:// ឬ HTTP:// ឬ https://
+    if text_lower.startswith("http://") or text_lower.startswith("https://"):
         await update.message.reply_chat_action("upload_photo")
         
         logo_file = "logo.png" if os.path.exists("logo.png") else None
 
         photo_bytes = generate_custom_qr_with_logo(
-            url=text,
+            url=text,  # រក្សាទុក URL ដើមដែលផ្ញើមក
             logo_path=logo_file,
             fg_color=(0, 229, 255),
             bg_color=(18, 24, 36)
@@ -116,7 +117,7 @@ async def generate_qr_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await context.bot.send_photo(
             chat_id=update.effective_chat.id,
             photo=photo_bytes,
-          #  caption=f"✨ **QR Code របស់អ្នកត្រូវបានបង្កើតរួចរាល់!**\n🔗 Link: {text}",
+         #   caption=f"✨ **QR Code របស់អ្នកត្រូវបានបង្កើតរួចរាល់!**\n🔗 Link: {text}",
             parse_mode="Markdown"
         )
 
@@ -124,7 +125,7 @@ bot_app = ApplicationBuilder().token(TOKEN).build()
 bot_app.add_handler(CommandHandler("start", start))
 bot_app.add_handler(CallbackQueryHandler(button_click_handler))
 
-# ចាប់រាល់ Message ទាំងអស់ដែលមានអត្ថបទ (Text)
+# ចាប់រាល់ Message ទាំងអស់ដែលមាន Text
 bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, generate_qr_handler))
 
 @asynccontextmanager
