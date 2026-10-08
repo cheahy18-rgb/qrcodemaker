@@ -183,9 +183,9 @@ async def generate_qr_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     # ផ្ញើរូបភាពដោយផ្ទាល់ (គ្មាន Quoted Header)
     caption = (
         f"✨ **QR Code ត្រូវបានបង្កើតរួចរាល់!**\n"
-        f"📌 **ប្រភេទ:** {data_type}\n"
-        f"🎨 **ពណ៌:** {palette['name']}\n\n"
-        f"📄 **ទិន្នន័យ:** `{raw_text}`"
+    #     f"📌 **ប្រភេទ:** {data_type}\n"
+    #    f"🎨 **ពណ៌:** {palette['name']}\n\n"
+    #    f"📄 **ទិន្នន័យ:** `{raw_text}`"
     )
 
     await context.bot.send_photo(
