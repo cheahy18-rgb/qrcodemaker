@@ -102,29 +102,25 @@ async def button_click_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.edit_message_text("❓ សូមផ្ញើ URL ដែលចាប់ផ្តើមដោយ `http://` ឬ `https://` (ឧទាហរណ៍៖ `https://google.com`)")
 
 async def generate_qr_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # ទាញយក Link ដែលអ្នកប្រើប្រាស់បានផ្ញើមក
     text = update.message.text.strip()
-    
     if text.startswith("http://") or text.startswith("https://"):
         await update.message.reply_chat_action("upload_photo")
         
-        try:
-            # បង្កើត QR Code ដោយផ្ទាល់ចេញពី Text URL (មិនបាច់ទាញយកទិន្នន័យពី Web)
-            photo_bytes = generate_custom_qr(
-                url=text,
-                fg_color=(0, 229, 255),  # Electric Cyan
-                bg_color=(18, 24, 36),    # Dark Charcoal
-                drawer_type="rounded"
-            )
+        # បង្កើត Styled QR Code
+        photo_bytes = generate_custom_qr(
+            url=text,
+            fg_color=(0, 229, 255),  # Electric Cyan
+            bg_color=(18, 24, 36),    # Dark Charcoal
+            drawer_type="rounded"     # Dots ជ្រុងមូល
+        )
 
-            await update.message.reply_photo(
-                photo=photo_bytes,
-          #     caption=f"✨ **QR Code របស់អ្នកត្រូវបានបង្កើតរួចរាល់!**\n🔗 Link: {text}",
-                parse_mode="Markdown"
-            )
-        except Exception as e:
-            logging.error(f"Error generating QR code: {e}")
-            await update.message.reply_text("❌ មានបញ្ហាក្នុងការបង្កើត QR Code សូមព្យាយាមម្តងទៀត។")
+        # ផ្ញើរូបភាពដោយផ្ទាល់ទៅក្នុង Chat ដោយមិនបាច់ធ្វើការ Reply (ដើម្បីកុំឱ្យចេញផ្ទាំង Quoted Name)
+        await context.bot.send_photo(
+            chat_id=update.effective_chat.id,
+            photo=photo_bytes,
+            caption=f"✨ **QR Code របស់អ្នកត្រូវបានបង្កើតរួចរាល់!**\n🔗 Link: {text}",
+            parse_mode="Markdown"
+        )
     else:
         await update.message.reply_text("⚠️ សូមផ្ញើ Link ដែលត្រឹមត្រូវ (ឧទាហរណ៍៖ `https://example.com`)", parse_mode="Markdown")
 
