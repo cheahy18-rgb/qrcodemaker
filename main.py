@@ -1,5 +1,6 @@
 import os
 import io
+import re
 import asyncio
 import logging
 from contextlib import asynccontextmanager
@@ -29,11 +30,20 @@ logging.basicConfig(
 
 TOKEN = os.getenv("BOT_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN")
 
-def generate_custom_qr_with_logo(
-    url: str,
-    logo_path: str = None,
+# បញ្ជីពណ៌សម្រាប់ Inline Keyboard
+COLOR_PALETTES = {
+    "cyan": {"name": "🩵 Cyan", "fg": (0, 229, 255), "bg": (18, 24, 36)},
+    "gold": {"name": "👑 Gold", "fg": (255, 215, 0), "bg": (20, 20, 20)},
+    "purple": {"name": "💜 Purple", "fg": (186, 85, 211), "bg": (15, 10, 25)},
+    "green": {"name": "💚 Green", "fg": (57, 255, 20), "bg": (10, 25, 15)},
+}
+
+# --- FUNCTION បង្កើត QR CODE (រៀបចំរៀង Dots និង Logo) ---
+def generate_custom_qr(
+    data: str,
     fg_color=(0, 229, 255),
-    bg_color=(18, 24, 36)
+    bg_color=(18, 24, 36),
+    logo_path: str = None
 ) -> io.BytesIO:
     qr = qrcode.QRCode(
         version=1,
@@ -41,18 +51,16 @@ def generate_custom_qr_with_logo(
         box_size=10,
         border=4,
     )
-    qr.add_data(url)
+    qr.add_data(data)
     qr.make(fit=True)
 
     qr_img = qr.make_image(
         image_factory=StyledPilImage,
         module_drawer=RoundedModuleDrawer(),
-        color_mask=SolidFillColorMask(
-            back_color=bg_color,
-            front_color=fg_color
-        )
+        color_mask=SolidFillColorMask(back_color=bg_color, front_color=fg_color)
     ).convert("RGBA")
 
+    # បញ្ចូល Logo បើមាន
     if logo_path and os.path.exists(logo_path):
         try:
             logo = Image.open(logo_path).convert("RGBA")
@@ -70,63 +78,129 @@ def generate_custom_qr_with_logo(
     bio.seek(0)
     return bio
 
+
+# --- TELEGRAM BOT HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # កំណត់ពណ៌ Default ប្រសិនបើមិនទាន់ជ្រើសរើស
+    if "selected_color" not in context.user_data:
+        context.user_data["selected_color"] = "cyan"
+
     keyboard = [
         [
-            InlineKeyboardButton("✨ Custom Styling", callback_data="btn_style"),
-            InlineKeyboardButton("❓ Help & Usage", callback_data="btn_help"),
+            InlineKeyboardButton("🩵 Cyan", callback_data="color_cyan"),
+            InlineKeyboardButton("👑 Gold", callback_data="color_gold"),
+        ],
+        [
+            InlineKeyboardButton("💜 Purple", callback_data="color_purple"),
+            InlineKeyboardButton("💚 Green", callback_data="color_green"),
+        ],
+        [
+            InlineKeyboardButton("ℹ️ របៀបប្រើប្រាស់", callback_data="btn_help")
         ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
+
+    msg = (
+        "👋 **ស្វាគមន៍មកកាន់ QRCodemakerBot!**\n\n"
+        "🎨 **ជ្រើសរើសពណ៌ QR Code ខាងក្រោម៖**\n\n"
+        "📌 **អ្នកអាចផ្ញើ៖**\n"
+        "• **Link:** `https://example.com`\n"
+        "• **Text ធម្មតា:** `ជម្រាបសួរ`\n"
+        "• **លេខទូរស័ព្ទ:** `012345678` ឬ `tel:012345678`\n"
+        "• **Wi-Fi:** `WIFI:S:MyNetwork;T:WPA;P:MyPassword;;`"
+    )
+
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text="👋 **Welcome to QRCode Bot!**\n\nសូមផ្ញើ Link មកកាន់ខ្ញុំ ខ្ញុំនឹងបង្កើត QR Code ជូនអ្នកភ្លាមៗ។",
+        text=msg,
         reply_markup=reply_markup,
         parse_mode="Markdown",
     )
 
+
 async def button_click_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    if query.data == "btn_style":
-        await query.edit_message_text("🎨 ផ្ញើ Link មកដើម្បីទទួលបាន QR Code ជាមួយ Styling!")
+
+    if query.data.startswith("color_"):
+        color_key = query.data.replace("color_", "")
+        context.user_data["selected_color"] = color_key
+        color_name = COLOR_PALETTES[color_key]["name"]
+        
+        await query.edit_message_text(
+            f"✅ **អ្នកបានជ្រើសរើសពណ៌៖ {color_name}**\n\nសូមផ្ញើ Link, Text, លេខទូរស័ព្ទ ឬ ព័ត៌មាន Wi-Fi មកឥឡូវនេះ!",
+            parse_mode="Markdown"
+        )
     elif query.data == "btn_help":
-        await query.edit_message_text("❓ សូមផ្ញើ Link ដែលចាប់ផ្តើមដោយ http:// ឬ https://")
+        help_text = (
+            "💡 **ការណែនាំអំពីទម្រង់ទិន្នន័យ៖**\n\n"
+            "1. **Link/URL:** ផ្ញើ Link ផ្ទាល់ (ឧ. `https://google.com`)\n"
+            "2. **PlainText:** ផ្ញើអត្ថបទធម្មតា\n"
+            "3. **លេខទូរស័ព្ទ:** ផ្ញើលេខទូរស័ព្ទ (ឧ. `012345678`)\n"
+            "4. **Wi-Fi Formats:** ផ្ញើតាមទម្រង់៖\n"
+            "`WIFI:S:ឈ្មោះWiFi;T:WPA;P:លេខសម្ងាត់;;`"
+        )
+        await query.edit_message_text(help_text, parse_mode="Markdown")
+
 
 async def generate_qr_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text:
         return
 
-    text = update.message.text.strip()
-    text_lower = text.lower()  # បំប្លែងជាអក្សរតូចដើម្បីងាយស្រួលផ្ទៀងផ្ទាត់ (Case-insensitive)
+    raw_text = update.message.text.strip()
     
-    # ចាប់យក URL ទោះជាប្រើ Http:// ឬ HTTP:// ឬ https://
-    if text_lower.startswith("http://") or text_lower.startswith("https://"):
-        await update.message.reply_chat_action("upload_photo")
-        
-        logo_file = "logo.png" if os.path.exists("logo.png") else None
+    # ចាប់យកជម្រើសពណ៌របស់អ្នកប្រើប្រាស់ (Default: cyan)
+    color_key = context.user_data.get("selected_color", "cyan")
+    palette = COLOR_PALETTES.get(color_key, COLOR_PALETTES["cyan"])
 
-        photo_bytes = generate_custom_qr_with_logo(
-            url=text,  # រក្សាទុក URL ដើមដែលផ្ញើមក
-            logo_path=logo_file,
-            fg_color=(0, 229, 255),
-            bg_color=(18, 24, 36)
-        )
+    # ដំណើរការទិន្នន័យ (រាប់បញ្ចូលទាំង PlainText / Phone / Wi-Fi / Link)[cite: 9]
+    qr_data = raw_text
+    data_type = "PlainText / ព័ត៌មាន"
 
-        # ផ្ញើរូបភាពដោយផ្ទាល់ទៅកាន់ Chat ID
-        await context.bot.send_photo(
-            chat_id=update.effective_chat.id,
-            photo=photo_bytes,
-         #   caption=f"✨ **QR Code របស់អ្នកត្រូវបានបង្កើតរួចរាល់!**\n🔗 Link: {text}",
-            parse_mode="Markdown"
-        )
+    # ត្រួតពិនិត្យប្រភេទ Link
+    if raw_text.lower().startswith("http://") or raw_text.lower().startswith("https://"):
+        data_type = "🔗 Link / URL"
+    # ត្រួតពិនិត្យប្រភេទ លេខទូរស័ព្ទ (បើជាលេខសុទ្ធ ឬមានទម្រង់ +855)
+    elif re.match(r"^(\+?\d{8,15})$", raw_text):
+        qr_data = f"tel:{raw_text}"
+        data_type = "📞 លេខទូរស័ព្ទ"
+    # ត្រួតពិនិត្យប្រភេទ Wi-Fi
+    elif raw_text.upper().startswith("WIFI:"):
+        data_type = "📶 ព័ត៌មាន Wi-Fi"
+
+    await update.message.reply_chat_action("upload_photo")
+
+    logo_file = "logo.png" if os.path.exists("logo.png") else None
+
+    # បង្កើត QR Code
+    photo_bytes = generate_custom_qr(
+        data=qr_data,
+        fg_color=palette["fg"],
+        bg_color=palette["bg"],
+        logo_path=logo_file
+    )
+
+    # ផ្ញើរូបភាពដោយផ្ទាល់ (គ្មាន Quoted Header)
+    caption = (
+        f"✨ **QR Code ត្រូវបានបង្កើតរួចរាល់!**\n"
+        f"📌 **ប្រភេទ:** {data_type}\n"
+        f"🎨 **ពណ៌:** {palette['name']}\n\n"
+        f"📄 **ទិន្នន័យ:** `{raw_text}`"
+    )
+
+    await context.bot.send_photo(
+        chat_id=update.effective_chat.id,
+        photo=photo_bytes,
+        caption=caption,
+        parse_mode="Markdown"
+    )
+
 
 bot_app = ApplicationBuilder().token(TOKEN).build()
 bot_app.add_handler(CommandHandler("start", start))
 bot_app.add_handler(CallbackQueryHandler(button_click_handler))
-
-# ចាប់រាល់ Message ទាំងអស់ដែលមាន Text
 bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, generate_qr_handler))
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
