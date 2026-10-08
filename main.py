@@ -119,7 +119,7 @@ async def generate_qr_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 
             await update.message.reply_photo(
                 photo=photo_bytes,
-                caption=f"✨ **QR Code របស់អ្នកត្រូវបានបង្កើតរួចរាល់!**\n🔗 Link: {text}",
+          #     caption=f"✨ **QR Code របស់អ្នកត្រូវបានបង្កើតរួចរាល់!**\n🔗 Link: {text}",
                 parse_mode="Markdown"
             )
         except Exception as e:
