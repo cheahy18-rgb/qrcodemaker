@@ -1,5 +1,6 @@
 import os
 import io
+import re
 import asyncio
 import logging
 from contextlib import asynccontextmanager
@@ -93,7 +94,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
         "👋 **ស្វាគមន៍មកកាន់ QRCodemakerBot!**\n\n"
         "🎨 **ជ្រើសរើសពណ៌ QR Code ខាងក្រោម៖**\n\n"
-        "👉 **សូមផ្ញើ Link (ចាប់ផ្តើមដោយ http:// ឬ https://) មកកាន់ខ្ញុំ ខ្ញុំនឹងបង្កើត QR Code ជូនភ្លាមៗ!**"
+        "👉 **សូមផ្ញើអត្ថបទ, Link ឬសារណាក៏បាន ខ្ញុំនឹងបំប្លែងវាជា QR Code ជូនភ្លាមៗ!**"
     )
 
     await context.bot.send_message(
@@ -113,7 +114,7 @@ async def button_click_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         color_name = COLOR_PALETTES[color_key]["name"]
         
         await query.edit_message_text(
-            f"✅ **បានប្តូរពណ៌ជោគជ័យ៖ {color_name}**\n\nឥឡូវនេះសូមផ្ញើ Link មកដើម្បីបង្កើត QR Code!",
+            f"✅ **បានប្តូរពណ៌ជោគជ័យ៖ {color_name}**\n\nឥឡូវនេះសូមផ្ញើសារ ឬ Link ណាមួយមកដើម្បីបង្កើត QR Code!",
             parse_mode="Markdown"
         )
 
@@ -122,43 +123,47 @@ async def generate_qr_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     raw_text = update.message.text.strip()
-    text_lower = raw_text.lower()
+    color_key = context.user_data.get("selected_color", "cyan")
+    palette = COLOR_PALETTES.get(color_key, COLOR_PALETTES["cyan"])
 
-    # ត្រួតពិនិត្យឱ្យដាច់ខាតថាត្រូវតែផ្តើមដោយ http:// ឬ https://
-    if text_lower.startswith("http://") or text_lower.startswith("https://"):
-        color_key = context.user_data.get("selected_color", "cyan")
-        palette = COLOR_PALETTES.get(color_key, COLOR_PALETTES["cyan"])
+    qr_data = raw_text
+    data_type = "📄 អត្ថបទធម្មតា (PlainText)"
 
-        await update.message.reply_chat_action("upload_photo")
+    if raw_text.lower().startswith("http://") or raw_text.lower().startswith("https://"):
+        data_type = "🔗 Link / URL"
+    elif re.match(r"^(\+?\d{8,15})$", raw_text):
+        qr_data = f"tel:{raw_text}"
+        data_type = "📞 លេខទូរស័ព្ទ"
 
-        logo_file = "logo.png" if os.path.exists("logo.png") else None
+    await update.message.reply_chat_action("upload_photo")
 
-        photo_bytes = generate_custom_qr(
-            data=raw_text,
-            fg_color=palette["fg"],
-            bg_color=palette["bg"],
-            logo_path=logo_file
-        )
+    logo_file = "logo.png" if os.path.exists("logo.png") else None
 
-        caption = (
-            f"✨ **QR Code ត្រូវបានបង្កើតរួចរាល់!**\n"
-            f"🎨 **ពណ៌:** {palette['name']}\n\n"
-            f"🔗 **Link:** `{raw_text}`"
-        )
+    photo_bytes = generate_custom_qr(
+        data=qr_data,
+        fg_color=palette["fg"],
+        bg_color=palette["bg"],
+        logo_path=logo_file
+    )
 
-        await context.bot.send_photo(
-            chat_id=update.effective_chat.id,
-            photo=photo_bytes,
-            caption=caption,
-            parse_mode="Markdown"
-        )
-    else:
-        # បើផ្ញើអត្ថបទធម្មតាផ្សេងពី Link Bot នឹងមិនបង្កើត QR Code ទេ
-        return
+    caption = (
+        f"✨ **QR Code ត្រូវបានបង្កើតរួចរាល់!**\n"
+        f"📌 **ប្រភេទ:** {data_type}\n"
+        f"🎨 **ពណ៌:** {palette['name']}\n\n"
+        f"💬 **ទិន្នន័យ:** `{raw_text}`"
+    )
+
+    await context.bot.send_photo(
+        chat_id=update.effective_chat.id,
+        photo=photo_bytes,
+        caption=caption,
+        parse_mode="Markdown"
+    )
 
 bot_app = ApplicationBuilder().token(TOKEN).build()
 bot_app.add_handler(CommandHandler("start", start))
 bot_app.add_handler(CallbackQueryHandler(button_click_handler))
+# ចាប់យករាល់ Message ទាំងអស់ដោយគ្មានការរឹតបន្តឹងលើ Link
 bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, generate_qr_handler))
 
 @asynccontextmanager
