@@ -124,9 +124,29 @@ async def generate_qr_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     raw_text = update.message.text.strip()
     text_lower = raw_text.lower()
 
-    # ត្រួតពិនិត្យផ្តាច់មុខ៖ ត្រូវតែចាប់ផ្តើមដោយ http:// ឬ https:// ប៉ុណ្ណោះ
     if text_lower.startswith("http://") or text_lower.startswith("https://"):
-        color_key = context.user_data.get("selected_color", "cyan")
+        # ពិនិត្យមើលថាតើ User បានជ្រើសរើសពណ៌ហើយឬยัง (ប្រសិនបើមិនទាន់មាន ជំរុញឱ្យចុច Start ឬជ្រើសរើសពណ៌សិន)
+        if "selected_color" not in context.user_data:
+            keyboard = [
+                [
+                    InlineKeyboardButton("🩵 Cyan", callback_data="color_cyan"),
+                    InlineKeyboardButton("👑 Gold", callback_data="color_gold"),
+                ],
+                [
+                    InlineKeyboardButton("💜 Purple", callback_data="color_purple"),
+                    InlineKeyboardButton("💚 Green", callback_data="color_green"),
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(
+                "🎨 **សូមជ្រើសរើសពណ៌ QR Code របស់អ្នកជាមុនសិន មុននឹងផ្ញើ Link!**",
+                reply_markup=reply_markup,
+                parse_mode="Markdown"
+            )
+            return
+
+        # ប្រសិនបើបានជ្រើសរើសពណ៌រួចហើយ ទើបបង្កើត QR Code តាមពណ៌នោះ
+        color_key = context.user_data["selected_color"]
         palette = COLOR_PALETTES.get(color_key, COLOR_PALETTES["cyan"])
 
         await update.message.reply_chat_action("upload_photo")
@@ -153,7 +173,6 @@ async def generate_qr_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
             parse_mode="Markdown"
         )
     else:
-        # បើផ្ញើសារធម្មតាផ្សេងពី Link គឺ Bot មិនអើពើ (Ignore)
         return
 
 bot_app = ApplicationBuilder().token(TOKEN).build()
